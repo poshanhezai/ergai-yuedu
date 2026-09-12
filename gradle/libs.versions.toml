@@ -43,7 +43,7 @@ miuix = "0.8.8"
 reorderable = "3.1.0"
 lazyColumnScrollbar = "2.2.0"
 
-zxingLite = "3.3.0"
+zxingLite = "3.5.0"
 
 #不要更新版本
 #noinspection NewerVersionAvailable
