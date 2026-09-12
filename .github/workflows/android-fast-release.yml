@@ -110,7 +110,7 @@ jobs:
           cp "$APK_PATH" "release-apks/legado-armeabi-v7a_app_${{ steps.version.outputs.name }}_${{ steps.version.outputs.code }}.apk"
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: legado-release-abi
           path: release-apks/*.apk
