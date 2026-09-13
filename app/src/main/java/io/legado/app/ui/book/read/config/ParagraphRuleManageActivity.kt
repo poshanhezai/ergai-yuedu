@@ -416,7 +416,9 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
             val target = File(dir, name)
             val canonicalDir = dir.canonicalFile
             val canonicalTarget = target.canonicalFile
-            if (canonicalTarget.parentFile?.canonicalFile?.let { it.path.startsWith(canonicalDir.path) } != true) {
+            if (canonicalTarget.parentFile?.canonicalFile?.let {
+                    it.path == canonicalDir.path || it.path.startsWith(canonicalDir.path + File.separator)
+                } != true) {
                 throw IOException("主题资源路径无效")
             }
             canonicalTarget.parentFile?.mkdirs()

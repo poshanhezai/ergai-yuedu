@@ -1658,6 +1658,7 @@ class TextChapterLayout(
                     staticLayout.getPrimaryHorizontal(charIndex + 1)
                 } else {
                     tempPaint.textSize = textSize
+                    tempPaint.typeface = textPaint.typeface
                     spanned.getSpans(charIndex, charIndex + 1, RuleTypefaceSpan::class.java)
                         .firstOrNull()?.typeface?.let { tempPaint.typeface = it }
                     val charWidth = tempPaint.measureText(char)

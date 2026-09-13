@@ -97,7 +97,11 @@ object ParagraphRuleProcessor {
         val context = currentCoroutineContext()
         var hasFailure = false
         for (rule in rules) {
-            if (rule.script.isBlank()) continue
+            val vars = readVars(rule.id)
+            if (rule.script.isBlank()) {
+                result = result.applyTheme(rule.id, vars)
+                continue
+            }
             result = kotlin.runCatching {
                 withTimeout(rule.validTimeout()) {
                     applyRule(rule, book, chapter, result, context)
@@ -135,7 +139,11 @@ object ParagraphRuleProcessor {
         var result = protectedContent.content
         val context = currentCoroutineContext()
         for (rule in rules) {
-            if (rule.script.isBlank()) continue
+            val vars = readVars(rule.id)
+            if (rule.script.isBlank()) {
+                result = applyTheme(rule.id, vars, result)
+                continue
+            }
             result = kotlin.runCatching {
                 withTimeout(rule.validTimeout()) {
                     applyRule(rule, book, chapter, result, context)
@@ -639,7 +647,7 @@ object ParagraphRuleProcessor {
     private fun applyTheme(ruleId: Long, vars: Map<String, String>, paragraphs: List<String>): List<String> {
         val bodyFont = firstVar(vars, "bodyFont", "bodyFontPath", "font", "fontPath", "fontFile", "ruleFont", "ruleFontPath")
         val pageBackground = firstVar(vars, "pageBackground", "pageBackgroundPath", "background", "backgroundPath")
-        val pageColor = firstColor(vars, "pageBackgroundColor", "pageBgColor", "pageColor", allowAlpha = true)
+        val pageColor = firstColor(vars, "pageBackgroundColor", "pageBgColor", "pageColor")
         val bodyColor = firstColor(vars, "bodyColor", "textColor", "fontColor")
         val bodyBackground = firstColor(
             vars,
@@ -647,7 +655,6 @@ object ParagraphRuleProcessor {
             "bodyBackground",
             "textBackgroundColor",
             "paragraphBackground",
-            allowAlpha = true
         )
         val bodySize = vars["bodySize"]?.trim()?.takeIf { it.matches(Regex("^(small|big|[1-7])$", RegexOption.IGNORE_CASE)) }
         val bold = enabled(vars["bodyBold"] ?: vars["bold"])
@@ -714,9 +721,10 @@ object ParagraphRuleProcessor {
         vars[name]?.trim()?.takeIf { it.isNotEmpty() }
     }
 
-    private fun firstColor(vars: Map<String, String>, vararg names: String, allowAlpha: Boolean = false): String? {
-        val pattern = if (allowAlpha) "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$" else "^#[0-9a-fA-F]{6}$"
-        return names.firstNotNullOfOrNull { name -> vars[name]?.trim()?.takeIf { it.matches(Regex(pattern)) } }
+    private fun firstColor(vars: Map<String, String>, vararg names: String): String? {
+        return names.firstNotNullOfOrNull { name ->
+            vars[name]?.trim()?.takeIf { it.matches(Regex("^#[0-9a-fA-F]{6}$")) }
+        }
     }
 
     private fun enabled(value: String?): Boolean = value?.trim()?.lowercase() in setOf("true", "1", "yes", "on", "是")
@@ -767,6 +775,7 @@ object ParagraphRuleProcessor {
         map.forEach { (key, value) ->
             if (key != null) appDb.paragraphRuleDao.putVar(ParagraphRuleVar(ruleId, key.toString(), value?.toString() ?: ""))
         }
+        ParagraphRuleThemeRuntime.invalidate(ruleId)
     }
 
     fun clickKey(ruleId: Long, js: String): String {
