@@ -220,13 +220,22 @@ class DictRuleEditDialog() : ComposeDialogFragment() {
 
         fun save(newDictRule: DictRule, onFinally: () -> Unit) {
             execute {
-                dictRule?.let {
-                    appDb.dictRuleDao.delete(it)
+                require(newDictRule.name.isNotBlank()) { "名称不能为空" }
+                require(newDictRule.urlRule.isNotBlank()) { "URL规则不能为空" }
+                val oldRule = dictRule
+                if (oldRule?.name != newDictRule.name && appDb.dictRuleDao.getByName(newDictRule.name) != null) {
+                    throw IllegalArgumentException("已存在同名字典规则")
                 }
-                appDb.dictRuleDao.insert(newDictRule)
+                // 名称是主键，编辑名称时必须删除旧主键再写入新主键；使用事务避免中途失败造成半成品。
+                appDb.runInTransaction {
+                    oldRule?.let { appDb.dictRuleDao.delete(it) }
+                    appDb.dictRuleDao.insert(newDictRule)
+                }
                 dictRule = newDictRule
-            }.onFinally {
+            }.onSuccess {
                 onFinally.invoke()
+            }.onError {
+                context.toastOnUi(it.localizedMessage ?: "保存字典规则失败")
             }
         }
 

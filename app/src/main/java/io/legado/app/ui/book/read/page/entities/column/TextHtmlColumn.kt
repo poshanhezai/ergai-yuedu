@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.read.page.entities.column
 
 import android.graphics.Canvas
+import android.graphics.Typeface
 import android.graphics.Color
 import android.os.Build
 import android.text.TextPaint
@@ -28,7 +29,8 @@ data class TextHtmlColumn(
     val isItalic: Boolean = false,
     val isUnderline: Boolean = false,
     val isStrikethrough: Boolean = false,
-    val backgroundColor: Int? = null
+    val backgroundColor: Int? = null,
+    val typeface: Typeface? = null
 ) : TextBaseColumn {
 
     override var textLine: TextLine = emptyTextLine
@@ -36,6 +38,7 @@ data class TextHtmlColumn(
     private val textPaint: TextPaint by lazy {
         TextPaint(ChapterProvider.contentPaint).apply {
             textSize = mTextSize
+            typeface?.let { this.typeface = it }
         }
     }
 

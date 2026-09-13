@@ -18,7 +18,7 @@ static def releaseTime() {
     return new Date().format("yy.MMddHH", TimeZone.getTimeZone("GMT+8"))
 }
 
-def name = "reader"
+def name = "yuedu-egg"
 // 私有版：版本号与原项目脱钩
 def version = project.hasProperty("VERSION_NAME")
         ? project.property("VERSION_NAME").toString()

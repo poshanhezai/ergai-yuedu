@@ -4,14 +4,17 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.drawable.GradientDrawable
+import android.graphics.Typeface
 import android.text.Editable
 import android.text.Html
 import android.text.SpannableStringBuilder
 import android.text.TextPaint
 import android.text.style.BackgroundColorSpan
 import android.text.style.ClickableSpan
+import android.text.style.MetricAffectingSpan
 import android.text.style.ReplacementSpan
 import android.view.View
+import io.legado.app.help.book.ParagraphRuleThemeRuntime
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.dpToPx
@@ -19,11 +22,23 @@ import org.xml.sax.XMLReader
 import splitties.init.appCtx
 
 class TextViewTagHandler(private val onButtonClickListener: OnButtonClickListener? = null) : Html.TagHandler {
+    /** Typeface span used by imported paragraph-rule themes. It affects both measuring and drawing. */
+    class RuleTypefaceSpan(val typeface: Typeface) : MetricAffectingSpan() {
+        override fun updateDrawState(textPaint: TextPaint) {
+            textPaint.typeface = typeface
+        }
+
+        override fun updateMeasureState(textPaint: TextPaint) {
+            textPaint.typeface = typeface
+        }
+    }
+
     companion object {
         private const val BUTTON_TAG = "button"
         private const val BUTTON_SPLIT = "@onclick:"
         private const val HR_TAG = "hr"
         private const val EPUB_BG_TAG_PREFIX = "epubbg"
+        private const val RULE_FONT_TAG_PREFIX = "legadofont_"
         const val HR_PLACE_CHAR = "—"
         const val HR_PLACE_STR = "———"
     }
@@ -41,6 +56,7 @@ class TextViewTagHandler(private val onButtonClickListener: OnButtonClickListene
     }
     private val buttonTagStack = mutableListOf<Int>()
     private val epubBgTagStack = mutableMapOf<String, MutableList<Int>>()
+    private val fontTagStack = mutableMapOf<String, MutableList<FontStart>>()
 
     override fun handleTag(
         opening: Boolean,
@@ -50,6 +66,27 @@ class TextViewTagHandler(private val onButtonClickListener: OnButtonClickListene
     ) {
         if (output == null || tag == null) return
         when {
+            tag.startsWith(RULE_FONT_TAG_PREFIX, ignoreCase = true) -> {
+                val token = tag.substring(RULE_FONT_TAG_PREFIX.length)
+                val typeface = ParagraphRuleThemeRuntime.typefaceForTag(token)
+                if (typeface != null) {
+                    if (opening) {
+                        fontTagStack.getOrPut(token) { mutableListOf() }
+                            .add(FontStart(output.length, typeface))
+                    } else {
+                        fontTagStack[token]?.removeLastOrNull()?.let { start ->
+                            if (start.index < output.length) {
+                                output.setSpan(
+                                    RuleTypefaceSpan(start.typeface),
+                                    start.index,
+                                    output.length,
+                                    SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             tag.equals(BUTTON_TAG, ignoreCase = true) ->{
                 if (opening) {
                     buttonTagStack.add(output.length)
@@ -127,6 +164,8 @@ class TextViewTagHandler(private val onButtonClickListener: OnButtonClickListene
             }
         }
     }
+
+    private data class FontStart(val index: Int, val typeface: Typeface)
 
     private fun String.toEpubTagColor(): Int? {
         val clean = trim().takeIf { it.length == 6 || it.length == 8 } ?: return null

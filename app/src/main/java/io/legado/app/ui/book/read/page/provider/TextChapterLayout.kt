@@ -72,6 +72,7 @@ import androidx.core.text.parseAsHtml
 import androidx.core.util.component1
 import androidx.core.util.component2
 import io.legado.app.help.TextViewTagHandler
+import io.legado.app.help.TextViewTagHandler.RuleTypefaceSpan
 import io.legado.app.help.TextViewTagHandler.Companion.HR_PLACE_CHAR
 import io.legado.app.help.TextViewTagHandler.Companion.HR_PLACE_STR
 import io.legado.app.model.analyzeRule.AnalyzeUrl.Companion.paramPattern
@@ -1657,6 +1658,8 @@ class TextChapterLayout(
                     staticLayout.getPrimaryHorizontal(charIndex + 1)
                 } else {
                     tempPaint.textSize = textSize
+                    spanned.getSpans(charIndex, charIndex + 1, RuleTypefaceSpan::class.java)
+                        .firstOrNull()?.typeface?.let { tempPaint.typeface = it }
                     val charWidth = tempPaint.measureText(char)
                     charX + charWidth
                 }
@@ -1732,7 +1735,12 @@ class TextChapterLayout(
                                 isItalic = spanned.hasStyleSpan(charIndex, Typeface.ITALIC),
                                 isUnderline = spanned.hasSpan(charIndex, UnderlineSpan::class.java),
                                 isStrikethrough = spanned.hasSpan(charIndex, StrikethroughSpan::class.java),
-                                backgroundColor = extractBackgroundColor(spanned, charIndex)
+                                backgroundColor = extractBackgroundColor(spanned, charIndex),
+                                typeface = spanned.getSpans(
+                                    charIndex,
+                                    charIndex + 1,
+                                    RuleTypefaceSpan::class.java
+                                ).firstOrNull()?.typeface
                             )
                         )
                         needAddText = false
@@ -1751,7 +1759,12 @@ class TextChapterLayout(
                             isItalic = spanned.hasStyleSpan(charIndex, Typeface.ITALIC),
                             isUnderline = spanned.hasSpan(charIndex, UnderlineSpan::class.java),
                             isStrikethrough = spanned.hasSpan(charIndex, StrikethroughSpan::class.java),
-                            backgroundColor = extractBackgroundColor(spanned, charIndex)
+                            backgroundColor = extractBackgroundColor(spanned, charIndex),
+                            typeface = spanned.getSpans(
+                                charIndex,
+                                charIndex + 1,
+                                RuleTypefaceSpan::class.java
+                            ).firstOrNull()?.typeface
                         )
                     )
                 }

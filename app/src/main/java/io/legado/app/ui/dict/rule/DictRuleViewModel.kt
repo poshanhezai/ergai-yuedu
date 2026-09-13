@@ -42,16 +42,18 @@ class DictRuleViewModel(application: Application) : BaseViewModel(application) {
     }
 
     fun enableSelection(vararg dictRule: DictRule) {
+        if (dictRule.isEmpty()) return
         execute {
             val array = dictRule.map { it.copy(enabled = true) }.toTypedArray()
-            appDb.dictRuleDao.insert(*array)
+            appDb.dictRuleDao.update(*array)
         }
     }
 
     fun disableSelection(vararg dictRule: DictRule) {
+        if (dictRule.isEmpty()) return
         execute {
             val array = dictRule.map { it.copy(enabled = false) }.toTypedArray()
-            appDb.dictRuleDao.insert(*array)
+            appDb.dictRuleDao.update(*array)
         }
     }
 

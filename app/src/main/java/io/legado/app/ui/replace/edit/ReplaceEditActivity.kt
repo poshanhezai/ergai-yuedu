@@ -159,7 +159,7 @@ class ReplaceEditActivity :
         replaceRule.scopeContent = cbScopeContent.isChecked
         replaceRule.scope = etScope.text.toString()
         replaceRule.excludeScope = etExcludeScope.text.toString()
-        replaceRule.timeoutMillisecond = etTimeout.text.toString().ifEmpty { "3000" }.toLong()
+        replaceRule.timeoutMillisecond = etTimeout.text.toString().toLongOrNull()?.coerceAtLeast(1L) ?: 3000L
         return replaceRule
     }
 

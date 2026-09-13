@@ -125,6 +125,7 @@ class BookSourceManageFragment(
     private val viewModel: BookSourceViewModel by viewModels()
     private val importRecordKey = "bookSourceRecordKey"
     private var sourceFlowJob: Job? = null
+    private var searchDebounceJob: Job? = null
     private var checkMessageRefreshJob: Job? = null
     private val groups = linkedSetOf<String>()
     private var sort = BookSourceSort.Default
@@ -568,7 +569,6 @@ class BookSourceManageFragment(
                 updateSourceHostHeaders(data)
                 refreshDebugMessages()
                 upCountView()
-                delay(500)
             }
         }
     }
@@ -585,7 +585,6 @@ class BookSourceManageFragment(
                 .collect {
                     groups.clear()
                     groups.addAll(it)
-                    delay(500)
                 }
         }
     }
@@ -778,7 +777,6 @@ class BookSourceManageFragment(
                         list.count { BookSourceCategory.categoryOf(it) == category }
                     }
                     categoryCountsState.value = counts to list.size
-                    delay(500)
                 }
         }
     }
@@ -1162,7 +1160,14 @@ class BookSourceManageFragment(
             return
         }
         searchQueryState.value = query
-        upBookSource(query)
+        // 输入搜索词时不要每敲一个字都重新创建数据库 Flow；快速输入只执行最后一次查询。
+        searchDebounceJob?.cancel()
+        searchDebounceJob = lifecycleScope.launch {
+            delay(250)
+            if (isActive && searchQueryState.value == query) {
+                upBookSource(query)
+            }
+        }
     }
 
     private fun checkSelectedInterval() {

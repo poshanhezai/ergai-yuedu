@@ -2,6 +2,7 @@ package io.legado.app.ui.book.read.config
 
 import android.graphics.Color
 import android.os.Bundle
+import android.util.Base64
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
@@ -12,6 +13,7 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
+import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
@@ -20,6 +22,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookParagraphRule
 import io.legado.app.data.entities.ParagraphRule
 import io.legado.app.data.entities.ParagraphRuleVar
+import io.legado.app.data.entities.ParagraphRuleThemePackage
 import io.legado.app.databinding.ActivityThemeManageBinding
 import io.legado.app.databinding.ItemThemePackageBinding
 import io.legado.app.help.http.newCallResponseBody
@@ -54,6 +57,8 @@ import io.legado.app.utils.writeText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.IOException
 
 class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), ItemTouchCallback.Callback {
 
@@ -69,11 +74,11 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
             lifecycleScope.launch {
                 kotlin.runCatching {
                     parseImportedRules(uri.readText(this@ParagraphRuleManageActivity))
-                }.onSuccess { rules ->
-                    if (rules.isEmpty()) {
+                }.onSuccess { themes ->
+                    if (themes.isEmpty()) {
                         toastOnUi(R.string.wrong_format)
                     } else {
-                        withContext(Dispatchers.IO) { insertImportedRules(rules) }
+                        withContext(Dispatchers.IO) { insertImportedThemes(themes) }
                         load()
                         toastOnUi(R.string.success)
                     }
@@ -206,11 +211,11 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
                     okHttpClient.newCallResponseBody { url(url) }.use { it.string() }
                 }
                 parseImportedRules(text)
-            }.onSuccess { rules ->
-                if (rules.isEmpty()) {
+            }.onSuccess { themes ->
+                if (themes.isEmpty()) {
                     toastOnUi(R.string.wrong_format)
                 } else {
-                    withContext(Dispatchers.IO) { insertImportedRules(rules) }
+                    withContext(Dispatchers.IO) { insertImportedThemes(themes) }
                     load()
                     toastOnUi(R.string.success)
                 }
@@ -318,6 +323,7 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
                     values.forEach { (key, value) ->
                         appDb.paragraphRuleDao.putVar(ParagraphRuleVar(ruleId, key, value))
                     }
+                    io.legado.app.help.book.ParagraphRuleThemeRuntime.invalidate(ruleId)
                 }
             }.onSuccess {
                 toastOnUi(R.string.success)
@@ -328,34 +334,143 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
         }
     }
 
-    private fun parseImportedRules(raw: String): List<ParagraphRule> {
+    private data class ImportedTheme(
+        val rule: ParagraphRule,
+        val vars: Map<String, String> = emptyMap(),
+        val assets: Map<String, String> = emptyMap()
+    )
+
+    private fun parseImportedRules(raw: String): List<ImportedTheme> {
         val text = raw.trim()
         if (text.isBlank()) return emptyList()
-        GSON.fromJsonArray<ParagraphRule>(text).getOrNull()?.let { return it }
-        GSON.fromJsonObject<ParagraphRule>(text).getOrNull()?.let { return listOf(it) }
+        val root = JsonParser.parseString(text)
+        if (root.isJsonObject && root.asJsonObject.get("format")?.asString == ParagraphRuleThemePackage.FORMAT) {
+            val theme = GSON.fromJson(root, ParagraphRuleThemePackage::class.java)
+                ?: throw IOException("主题包为空")
+            if (theme.schemaVersion != ParagraphRuleThemePackage.SCHEMA_VERSION) {
+                throw IOException("不支持的主题包版本：${theme.schemaVersion}")
+            }
+            validateTheme(theme)
+            return listOf(ImportedTheme(theme.rule, theme.vars, theme.assets))
+        }
+        GSON.fromJsonArray<ParagraphRule>(text).getOrNull()?.let { rules ->
+            return rules.map { ImportedTheme(it) }
+        }
+        GSON.fromJsonObject<ParagraphRule>(text).getOrNull()?.let {
+            return listOf(ImportedTheme(it))
+        }
         return emptyList()
     }
 
-    private fun insertImportedRules(rules: List<ParagraphRule>) {
-        var order = (appDb.paragraphRuleDao.maxOrder() ?: 0) + 1
-        rules.forEach { imported ->
-            val rule = imported.copy(id = 0L, order = order++, updateTime = System.currentTimeMillis())
-            appDb.paragraphRuleDao.insert(rule)
+    private fun validateTheme(theme: ParagraphRuleThemePackage) {
+        if (theme.rule.name.isBlank()) throw IOException("主题规则名称不能为空")
+        if (theme.assets.size > MAX_THEME_ASSETS) throw IOException("主题资源过多")
+        var total = 0L
+        for ((name, encoded) in theme.assets) {
+            validateAssetName(name)
+            if (encoded.length > MAX_THEME_ASSET_BASE64) throw IOException("主题资源过大：$name")
+            total += encoded.length.toLong()
+            if (total > MAX_THEME_TOTAL_BASE64) throw IOException("主题资源总大小过大")
         }
+        if (theme.vars.size > MAX_THEME_VARS) throw IOException("主题变量过多")
+    }
+
+    private fun validateAssetName(name: String): String {
+        val clean = name.trim().replace('\\', '/')
+        if (clean.isBlank() || clean.startsWith('/') || clean.contains(':') ||
+            clean.split('/').any { it.isBlank() || it == "." || it == ".." }
+        ) throw IOException("主题资源路径无效")
+        return clean
+    }
+
+    private fun insertImportedThemes(themes: List<ImportedTheme>) {
+        var order = (appDb.paragraphRuleDao.maxOrder() ?: 0) + 1
+        themes.forEach { imported ->
+            val rule = imported.rule.copy(id = 0L, order = order++, updateTime = System.currentTimeMillis())
+            val ruleId = appDb.paragraphRuleDao.insert(rule)
+            val resolvedVars = if (imported.assets.isEmpty()) {
+                imported.vars
+            } else {
+                val assetDir = File(filesDir, "paragraphRuleThemes/$ruleId")
+                assetDir.mkdirs()
+                val assetPaths = decodeThemeAssets(assetDir, imported.assets)
+                imported.vars.mapValues { (_, value) -> assetPaths[value] ?: value }
+            }
+            appDb.paragraphRuleDao.deleteVars(ruleId)
+            resolvedVars.forEach { (name, value) ->
+                appDb.paragraphRuleDao.putVar(ParagraphRuleVar(ruleId, name, value))
+            }
+        }
+    }
+
+    private fun decodeThemeAssets(dir: File, assets: Map<String, String>): Map<String, String> {
+        val result = LinkedHashMap<String, String>()
+        for ((rawName, encoded) in assets) {
+            val name = validateAssetName(rawName)
+            val data = try {
+                Base64.decode(encoded, Base64.DEFAULT)
+            } catch (error: IllegalArgumentException) {
+                throw IOException("主题资源编码无效：$name", error)
+            }
+            if (data.size > MAX_THEME_ASSET_BYTES) throw IOException("主题资源过大：$name")
+            val target = File(dir, name)
+            val canonicalDir = dir.canonicalFile
+            val canonicalTarget = target.canonicalFile
+            if (canonicalTarget.parentFile?.canonicalFile?.let { it.path.startsWith(canonicalDir.path) } != true) {
+                throw IOException("主题资源路径无效")
+            }
+            canonicalTarget.parentFile?.mkdirs()
+            canonicalTarget.writeBytes(data)
+            result[name] = canonicalTarget.absolutePath
+        }
+        return result
     }
 
     private fun exportRule(rule: ParagraphRule) {
-        exportRuleResult.launch {
-            mode = HandleFileContract.EXPORT
-            fileData = HandleFileContract.FileData(
-                "paragraphRule-${rule.displayName()}.json",
-                serializeRule(rule).toByteArray(),
-                "application/json"
-            )
+        lifecycleScope.launch {
+            val json = withContext(Dispatchers.IO) { serializeRule(rule) }
+            exportRuleResult.launch {
+                mode = HandleFileContract.EXPORT
+                fileData = HandleFileContract.FileData(
+                    "paragraphRule-${rule.displayName()}.json",
+                    json.toByteArray(Charsets.UTF_8),
+                    "application/json"
+                )
+            }
         }
     }
 
-    private fun serializeRule(rule: ParagraphRule): String = GSON.toJson(rule)
+    private fun serializeRule(rule: ParagraphRule): String {
+        val vars = appDb.paragraphRuleDao.vars(rule.id).associate { it.name to it.value }
+        val assets = LinkedHashMap<String, String>()
+        val exportedVars = vars.mapValues { (_, value) ->
+            val source = localAssetSource(value) ?: return@mapValues value
+            val bytes = source.readBytesOrNull() ?: return@mapValues value
+            if (bytes.size > MAX_THEME_ASSET_BYTES || assets.values.sumOf { it.length.toLong() } > MAX_THEME_TOTAL_BASE64) {
+                return@mapValues value
+            }
+            val key = "assets/${source.name.replace(Regex("[^A-Za-z0-9._-]"), "_")}"
+            assets.putIfAbsent(key, Base64.encodeToString(bytes, Base64.NO_WRAP))
+            key
+        }
+        return if (assets.isEmpty()) {
+            GSON.toJson(rule)
+        } else {
+            GSON.toJson(ParagraphRuleThemePackage(rule = rule.copy(id = 0L), vars = exportedVars, assets = assets))
+        }
+    }
+
+    private fun localAssetSource(value: String): File? {
+        val text = value.trim()
+        val file = when {
+            text.startsWith("file://", true) -> runCatching { File(android.net.Uri.parse(text).path.orEmpty()) }.getOrNull()
+            text.startsWith("content://", true) -> return null
+            else -> File(text)
+        }
+        return file?.takeIf { it.isFile && it.length() <= MAX_THEME_ASSET_BYTES }
+    }
+
+    private fun File.readBytesOrNull(): ByteArray? = runCatching { readBytes() }.getOrNull()
 
     private fun deleteRule(rule: ParagraphRule) {
         showComposeConfirmDialog(
@@ -477,6 +592,11 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
     }
 
     companion object {
+        private const val MAX_THEME_ASSETS = 32
+        private const val MAX_THEME_VARS = 256
+        private const val MAX_THEME_ASSET_BYTES = 8 * 1024 * 1024
+        private const val MAX_THEME_ASSET_BASE64 = MAX_THEME_ASSET_BYTES * 2
+        private const val MAX_THEME_TOTAL_BASE64 = 24L * 1024L * 1024L
         private const val MENU_IMPORT = 1
         private const val MENU_HELP = 2
     }

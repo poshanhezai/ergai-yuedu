@@ -1,10 +1,10 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--App-->
-    <string name="app_name">阅读</string>
-    <string name="app_launcher_name">阅读</string>
-    <string name="app_name_a">阅读·A</string>
-    <string name="app_name_s" translatable="false">阅读Plus</string>
+    <string name="app_name">阅读egg版</string>
+    <string name="app_launcher_name">阅读egg版</string>
+    <string name="app_name_a">阅读egg版</string>
+    <string name="app_name_s" translatable="false">阅读egg版</string>
     <string name="receiving_shared_label">阅读·搜索</string>
     <string name="tip_perm_request_storage">阅读 needs storage access to find and read books. please go "App Settings" to allow "Storage permission".</string>
 
@@ -1834,7 +1834,7 @@ function login() {
     <string name="video_setting">视频设置</string>
     <string name="video_setting_summary">自动播放、全屏播放等配置</string>
     <string name="history">历史记录</string>
-    <string name="app_name_sigma">阅读</string>
+    <string name="app_name_sigma">阅读egg版</string>
     <string name="about_description_sigma"></string>
     <string name="contributors_summary_sigma"></string>
     <string name="app_share_description_sigma">分享</string>

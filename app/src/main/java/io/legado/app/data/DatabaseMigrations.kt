@@ -24,8 +24,19 @@ object DatabaseMigrations {
             migration_95_96, migration_96_97, migration_97_98, migration_98_99,
             migration_99_100, migration_100_101, migration_101_102, migration_102_103,
             migration_103_104, migration_104_105, migration_105_106,
-            migration_106_107, migration_107_108, migration_108_109,
+            migration_106_107, migration_107_108, migration_108_109, migration_109_110, migration_110_111,
         )
+    }
+    private val migration_109_110 = object : Migration(109, 110) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP TABLE IF EXISTS `highlight_rules`")
+        }
+    }
+
+    private val migration_110_111 = object : Migration(110, 111) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP TABLE IF EXISTS `highlight_rules`")
+        }
     }
 
     private val migration_108_109 = object : Migration(108, 109) {

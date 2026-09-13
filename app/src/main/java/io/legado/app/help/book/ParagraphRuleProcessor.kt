@@ -212,12 +212,15 @@ object ParagraphRuleProcessor {
     ): ChapterResult {
         val paragraphs = parseParagraphs(current.paragraphs)
         if (paragraphs.isEmpty()) return current
-        val ctx = buildCtx(rule, book, chapter, current.content, paragraphs, readVars(rule.id))
+        val vars = readVars(rule.id)
+        val ctx = buildCtx(rule, book, chapter, current.content, paragraphs, vars)
         val scope = buildScope(rule, book, chapter, current.content, ctx, coroutineContext, null)
         val script = buildRuleScript(rule, ctx)
         val jsResult = RhinoScriptEngine.eval(script, scope, coroutineContext)
         writeVars(rule.id, ctx["vars"])
-        return applyChapterResult(current, paragraphs, jsResult).wrapPclicks(rule.id)
+        return applyChapterResult(current, paragraphs, jsResult)
+            .wrapPclicks(rule.id)
+            .applyTheme(rule.id, vars)
     }
 
     private fun applyRule(
@@ -229,12 +232,13 @@ object ParagraphRuleProcessor {
     ): String {
         val paragraphs = parseContent(content)
         if (paragraphs.isEmpty()) return content
-        val ctx = buildCtx(rule, book, chapter, content, paragraphs, readVars(rule.id))
+        val vars = readVars(rule.id)
+        val ctx = buildCtx(rule, book, chapter, content, paragraphs, vars)
         val scope = buildScope(rule, book, chapter, content, ctx, coroutineContext, null)
         val script = buildRuleScript(rule, ctx)
         val jsResult = RhinoScriptEngine.eval(script, scope, coroutineContext)
         writeVars(rule.id, ctx["vars"])
-        return wrapPclicks(rule.id, applyResult(content, paragraphs, jsResult))
+        return applyTheme(rule.id, vars, wrapPclicks(rule.id, applyResult(content, paragraphs, jsResult)))
     }
 
     private fun buildRuleScript(rule: ParagraphRule, ctx: Map<String, Any?>): String {
@@ -620,6 +624,109 @@ object ParagraphRuleProcessor {
         val id = body.substring(RULE_PREFIX.length, colon).toLongOrNull() ?: return null
         return id to body.substring(colon + 1)
     }
+
+    /** Applies presentation variables carried by a paragraph rule without changing its script output. */
+    private fun ChapterResult.applyTheme(ruleId: Long, vars: Map<String, String>): ChapterResult {
+        val themed = applyTheme(ruleId, vars, paragraphs)
+        return ChapterResult(themed.joinToString("\n"), themed, sourceIndexes.normalizedSourceIndexes(themed.size))
+    }
+
+    private fun applyTheme(ruleId: Long, vars: Map<String, String>, text: String): String {
+        val result = applyTheme(ruleId, vars, text.split('\n'))
+        return result.joinToString("\n")
+    }
+
+    private fun applyTheme(ruleId: Long, vars: Map<String, String>, paragraphs: List<String>): List<String> {
+        val bodyFont = firstVar(vars, "bodyFont", "bodyFontPath", "font", "fontPath", "fontFile", "ruleFont", "ruleFontPath")
+        val pageBackground = firstVar(vars, "pageBackground", "pageBackgroundPath", "background", "backgroundPath")
+        val pageColor = firstColor(vars, "pageBackgroundColor", "pageBgColor", "pageColor", allowAlpha = true)
+        val bodyColor = firstColor(vars, "bodyColor", "textColor", "fontColor")
+        val bodyBackground = firstColor(
+            vars,
+            "bodyBackgroundColor",
+            "bodyBackground",
+            "textBackgroundColor",
+            "paragraphBackground",
+            allowAlpha = true
+        )
+        val bodySize = vars["bodySize"]?.trim()?.takeIf { it.matches(Regex("^(small|big|[1-7])$", RegexOption.IGNORE_CASE)) }
+        val bold = enabled(vars["bodyBold"] ?: vars["bold"])
+        val italic = enabled(vars["bodyItalic"] ?: vars["italic"])
+        val underline = enabled(vars["bodyUnderline"] ?: vars["underline"])
+        val strike = enabled(vars["bodyStrike"] ?: vars["strike"])
+        val hasStyle = bodyFont != null || pageBackground != null || pageColor != null || bodyColor != null ||
+            bodyBackground != null || bodySize != null || bold || italic || underline || strike
+        if (!hasStyle) return paragraphs
+
+        var backgroundInserted = paragraphs.any { it.contains("data-epub-page-bg", ignoreCase = true) ||
+            it.contains("data-epub-background", ignoreCase = true) }
+        return paragraphs.map { paragraph ->
+            val value = paragraph.trim()
+            if (value.isEmpty() || value.contains("\uE000LEGADO_SPECIAL_")) return@map paragraph
+            val isUseHtml = value.startsWith("<usehtml", ignoreCase = true)
+            val inner = if (isUseHtml) {
+                val start = value.indexOf('>')
+                val end = value.lastIndexOf("</", ignoreCase = true)
+                if (start >= 0 && end > start) value.substring(start + 1, end) else escapeHtml(value)
+            } else {
+                escapeHtml(paragraph)
+            }
+            val open = StringBuilder()
+            val close = StringBuilder()
+            if (!backgroundInserted && (pageBackground != null || pageColor != null)) {
+                pageColor?.let { open.append("<span data-epub-page-bg=\"").append(it.removePrefix("#")).append("\"></span>") }
+                pageBackground?.let {
+                    open.append("<img data-epub-background=\"true\" src=\"")
+                        .append(escapeHtml(it)).append("\">")
+                }
+                backgroundInserted = true
+            }
+            if (bodyFont != null) {
+                open.append("<legadofont_").append(ruleId).append("_body>")
+                close.insert(0, "</legadofont_${ruleId}_body>")
+            }
+            bodyColor?.let {
+                open.append("<font color=\"").append(it).append("\">")
+                close.insert(0, "</font>")
+            }
+            bodyBackground?.let {
+                open.append("<epubbg").append(it.removePrefix("#")).append(">")
+                close.insert(0, "</epubbg${it.removePrefix("#")}>")
+            }
+            if (bold) { open.append("<b>"); close.insert(0, "</b>") }
+            if (italic) { open.append("<i>"); close.insert(0, "</i>") }
+            if (underline) { open.append("<u>"); close.insert(0, "</u>") }
+            if (strike) { open.append("<s>"); close.insert(0, "</s>") }
+            bodySize?.let {
+                if (it.equals("small", true) || it.equals("big", true)) {
+                    open.append('<').append(it.lowercase()).append('>')
+                    close.insert(0, "</${it.lowercase()}>")
+                } else {
+                    open.append("<font size=\"").append(it).append("\">")
+                    close.insert(0, "</font>")
+                }
+            }
+            "<usehtml>${open}${inner}${close}</usehtml>"
+        }
+    }
+
+    private fun firstVar(vars: Map<String, String>, vararg names: String): String? = names.firstNotNullOfOrNull { name ->
+        vars[name]?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun firstColor(vars: Map<String, String>, vararg names: String, allowAlpha: Boolean = false): String? {
+        val pattern = if (allowAlpha) "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$" else "^#[0-9a-fA-F]{6}$"
+        return names.firstNotNullOfOrNull { name -> vars[name]?.trim()?.takeIf { it.matches(Regex(pattern)) } }
+    }
+
+    private fun enabled(value: String?): Boolean = value?.trim()?.lowercase() in setOf("true", "1", "yes", "on", "是")
+
+    private fun escapeHtml(value: String): String = value
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&#39;")
 
     private fun wrapPclicks(ruleId: Long, text: String): String {
         return dedupeParagraphRuleImages(pclickAttributeRegex.replace(text) { match ->

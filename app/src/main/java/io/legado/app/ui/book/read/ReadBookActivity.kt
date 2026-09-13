@@ -3165,12 +3165,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         if (!epubCoreActive) {
             binding.readView.onPageChange()
         }
-        handler.post {
-            upSeekBarProgress()
-        }
-        executor.execute {
-            startBackupJob()
-        }
+        // Fast page turns can trigger this callback repeatedly; throttle UI refresh.
+        upSeekBarThrottle.invoke()
+        // startBackupJob already has its own delay and cancellation.
+        startBackupJob()
     }
 
     /**

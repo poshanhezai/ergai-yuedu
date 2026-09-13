@@ -1,4 +1,6 @@
-# 二改阅读
+# 阅读egg版
+
+> 根据个人喜好二改的阅读arc。
 
 > 基于 [阅读 Archive](https://github.com/Rimchars/legado)（继承 [Legado](https://github.com/gedoor/legado)）的二次修改版本。
 > 上游的阅读体验、书源规则引擎、主题、EPUB / 漫画 / 视频 / 朗读等能力完整保留，本仓库主要把**书源管理**做深做细。
@@ -7,7 +9,7 @@
 
 **直接下载 APK**（Android 5.0 及以上，包名 com.myreader.app）：
 
-- 最新版安装包：https://github.com/poshanhezai/ergai-yuedu/releases/latest
+- 最新版安装包：https://github.com/poshanhezai/yuedu-egg/releases/latest
 - 也可以在本仓库右侧的 **Releases** 里下载历史版本
 
 下载后用文件管理器点开安装即可。小米 / 红米若没弹出安装界面，去「设置 → 更多设置 → 开发者选项」里允许「通过 USB 安装应用」，或允许安装未知来源应用。
@@ -55,5 +57,5 @@ gradlew.bat assembleDebug
 
 ## 声明
 
-- 本项目是开源阅读应用的二次修改版，**遵循上游的 GPL-3.0 协议**，保留原始许可证与版权声明（见 [LICENSE](LICENSE)）。
+- 本项目是开源阅读应用的二次修改版（阅读egg版），**遵循上游的 GPL-3.0 协议**，保留原始许可证与版权声明（见 [LICENSE](LICENSE)）。
 - 软件不提供任何书籍内容与书源，书源由使用者自行导入；请遵守所在地法律法规以及目标网站的服务条款。
