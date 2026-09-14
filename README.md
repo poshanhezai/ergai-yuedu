@@ -39,6 +39,14 @@
 
 
 
+## 段落规则
+
+本仓库额外提供可导入的对话高亮段落规则，仅作为规则资料发布，不改变阅读egg版 App 功能。
+
+- [下载对话高亮段落规则（JSON）](https://github.com/poshanhezai/yuedu-egg/releases/latest/download/dialogue-highlight-custom-style-fixed.json)
+- [查看使用方法、十四条说明与注意事项](docs/paragraph-rule-dialogue-highlight-guide.md)
+- [浏览段落规则目录](paragraph-rules/)
+
 ## 声明
 
 - 本项目是开源阅读应用的二次修改版（阅读egg版），**遵循上游的 GPL-3.0 协议**，保留原始许可证与版权声明（见 [LICENSE](LICENSE)）。
